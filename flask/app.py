@@ -1,3 +1,4 @@
+import os
 from flask import Flask, render_template, redirect, url_for, request, session
 from flask_bootstrap import Bootstrap
 from random import choice
@@ -6,8 +7,8 @@ app = Flask(__name__)
 app.secret_key = 'mysecretkey'
 Bootstrap(app)
 
-# Base de datos de usuarios (para fines de demostración)
-users_db = {}
+# Archivo para guardar usuarios
+USERS_FILE = 'users.txt'
 
 # Base de datos de preguntas por área
 questions_db = {
@@ -28,6 +29,26 @@ questions_db = {
     ]
 }
 
+# Funciones para manejo de usuarios
+def load_users():
+    """Carga los usuarios del archivo a un diccionario."""
+    if not os.path.exists(USERS_FILE):
+        return {}
+    with open(USERS_FILE, 'r') as file:
+        users = {}
+        for line in file:
+            username, password = line.strip().split(':')
+            users[username] = password
+        return users
+
+def save_user(username, password):
+    """Guarda un nuevo usuario en el archivo."""
+    with open(USERS_FILE, 'a') as file:
+        file.write(f'{username}:{password}\n')
+
+# Cargar usuarios al iniciar la app
+users_db = load_users()
+
 @app.route('/')
 def index():
     if 'username' in session:
@@ -43,7 +64,7 @@ def login():
         session['username'] = username
         return redirect(url_for('home'))
     else:
-        return redirect(url_for('index'))
+        return "Usuario o contraseña incorrectos. <a href='/'>Intentar de nuevo</a>"
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -53,6 +74,7 @@ def register():
         
         if username not in users_db:
             users_db[username] = password
+            save_user(username, password)  # Guardar en el archivo
             session['username'] = username
             return redirect(url_for('home'))
         else:
@@ -70,7 +92,6 @@ def area(area):
     if 'username' not in session:
         return redirect(url_for('index'))
     
-    # Obtener las preguntas del área seleccionado
     questions = questions_db.get(area, [])
     return render_template('area.html', area=area, questions=questions)
 
@@ -79,11 +100,9 @@ def question_trainer(area, question):
     if 'username' not in session:
         return redirect(url_for('index'))
 
-    # Decodificar la pregunta en caso de que esté codificada (por ejemplo, "%20" para espacios)
     from urllib.parse import unquote
     question = unquote(question)
 
-    # Buscar la pregunta y su respuesta
     question_data = next((item for item in questions_db.get(area, []) if item['question'] == question), None)
 
     if not question_data:
@@ -96,7 +115,6 @@ def quick_trainer():
     if 'username' not in session:
         return redirect(url_for('index'))
 
-    # Seleccionar una pregunta aleatoria de todas las áreas
     all_questions = [q for questions in questions_db.values() for q in questions]
     random_question = choice(all_questions)
 
@@ -104,7 +122,6 @@ def quick_trainer():
         user_answer = request.form['user_answer']
         correct_answer = random_question['answer']
 
-        # Validar la respuesta del usuario
         if user_answer.strip().lower() == correct_answer.strip().lower():
             feedback = "¡Correcto! 🎉"
         else:
@@ -125,3 +142,4 @@ def logout():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
